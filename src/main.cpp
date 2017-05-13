@@ -31,8 +31,11 @@ bool metric = true;
 uint8_t pressureUnit = 1; // unit: B000 = Pa, B001 = hPa, B010 = Hg, B011 = atm, B100 = bar, B101 = torr, B110 = N/m^2, B111 = psi
 
 SimpleTimer timer;
-
 float temp, hum, pres;
+bool bmeReady = false;
+int phonePres;
+bool phonePresReady = false;
+
 
 void sendMeasurements() {
   bme.read(pres, temp, hum, metric, pressureUnit); // Parameters: (float& pressure, float& temp, float& humidity, bool celsius = false, uint8_t pressureUnit = 0x0)
@@ -42,11 +45,18 @@ void sendMeasurements() {
   Serial.print(hum, 4);
   Serial.print(", Pressure: ");
   Serial.print(pres, 4);
+  if(phonePresReady) {
+    Serial.print(", Phone Pressure: ");
+    Serial.print(phonePres);
+  }
   Serial.println("");
   Blynk.virtualWrite(1, temp);
-  Blynk.virtualWrite(6, temp);
+  // Blynk.virtualWrite(6, temp);
   Blynk.virtualWrite(2, hum);
   Blynk.virtualWrite(3, pres);
+  if(phonePresReady) {
+    Blynk.virtualWrite(4, phonePres);
+  }
 }
 
 void setup() {
@@ -76,6 +86,7 @@ void setup() {
 
   Blynk.config(auth, server);
 
+  bmeReady = true;
   timer.setInterval(10000L, sendMeasurements);
   sendMeasurements();
 }
@@ -86,10 +97,10 @@ void loop() {
 }
 
 BLYNK_WRITE(V5) {
-  int phonePres = param[0].asInt();
-  Blynk.virtualWrite(4, phonePres);
-  Serial.print("phonePres: ");
-  Serial.println(phonePres);
+  phonePres = param[0].asInt();
+  phonePresReady = true;
+  // Serial.print("phonePres: ");
+  // Serial.println(phonePres);
 }
 
 // BLYNK_READ(V1) {
