@@ -41,18 +41,11 @@ uint8_t pressureUnit = 1; // unit: B000 = Pa, B001 = hPa, B010 = Hg, B011 = atm,
 SimpleTimer timer;
 float temp, hum, pres;
 bool bmeReady = false;
-int phonePres;
-bool phonePresReady = false;
 
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, I2C_SCL, I2C_SDA, U8X8_PIN_NONE);
-
 byte x {0};
 byte y {0};
 bool screenOn = true;
-
-float calcAltitude(int phonePres, float pres) {
-  return 283 - (phonePres - pres) / 0.12;
-}
 
 void sendMeasurements() {
   bme.read(pres, temp, hum, metric, pressureUnit); // Parameters: (float& pressure, float& temp, float& humidity, bool celsius = false, uint8_t pressureUnit = 0x0)
@@ -67,20 +60,11 @@ void sendMeasurements() {
   Serial.print(hum, 4);
   Serial.print(", Pressure: ");
   Serial.print(pres, 4);
-  if(phonePresReady) {
-    Serial.print(", Phone Pressure: ");
-    Serial.print(phonePres);
-  }
   Serial.println("");
   Blynk.virtualWrite(1, temp);
   // Blynk.virtualWrite(6, temp);
   Blynk.virtualWrite(2, hum);
   Blynk.virtualWrite(3, pres);
-  if(phonePresReady) {
-    float alt = calcAltitude(phonePres, pres);
-    Blynk.virtualWrite(4, phonePres);
-    Blynk.virtualWrite(6, alt);
-  }
 }
 
 void setup() {
@@ -128,18 +112,25 @@ void loop() {
   timer.run();
 }
 
-BLYNK_WRITE(V5) {
-  phonePres = param[0].asInt();
-  phonePresReady = true;
-  // Serial.print("phonePres: ");
-  // Serial.println(phonePres);
-}
-
 BLYNK_WRITE(V7) {
   screenOn = param[0].asInt() == 1;
   if(screenOn) {
     draw(temp, hum, pres);
   } else {
+    u8g2.clear();
+  }
+}
+
+BLYNK_WRITE(V10) {
+  const char * cmdc = param[0].asStr();
+  Serial.println("V10 cmd received: ");
+  String cmd = String(cmdc);
+  Serial.println(cmd);
+  if(cmd == "scron") {
+    screenOn = true;
+    draw(temp, hum, pres);
+  } else if(cmd == "scroff") {
+    screenOn = false;
     u8g2.clear();
   }
 }
@@ -177,24 +168,6 @@ void draw(float temp, float humidity, float pressure) {
     u8g2.drawStr(x, y, buf);
   }
   u8g2.sendBuffer();
-
-  espInfo();
-}
-
-void espInfo() {
-  Serial.print("ESP.getFlashChipRealSize(): ");
-  Serial.println(ESP.getFlashChipRealSize());
-  Serial.print("ESP.getFlashChipSpeed(): ");
-  Serial.println(ESP.getFlashChipSpeed());
-  Serial.print("ESP.getVcc(): ");
-  Serial.println(ESP.getVcc());
-
-  terminal.print("ESP.getFlashChipRealSize(): ");
-  terminal.println(ESP.getFlashChipRealSize());
-  terminal.print("ESP.getFlashChipSpeed(): ");
-  terminal.println(ESP.getFlashChipSpeed());
-  terminal.print("ESP.getVcc(): ");
-  terminal.println(ESP.getVcc());
 }
 
 void drawMessageLF(char const *msg) {
