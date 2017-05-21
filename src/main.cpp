@@ -129,9 +129,11 @@ BLYNK_WRITE(V10) {
   if(cmd == "scron") {
     screenOn = true;
     draw(temp, hum, pres);
+    terminal.println("Screen on");
   } else if(cmd == "scroff") {
     screenOn = false;
     u8g2.clear();
+    terminal.println("Screen off");
   }
 }
 
