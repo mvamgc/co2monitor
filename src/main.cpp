@@ -23,7 +23,8 @@ WiFiManager wifiManager;
 
 BME280I2C bme;
 
-SimpleTimer timer;
+SimpleTimer readTimer;
+SimpleTimer sendTimer;
 
 // Blynk data
 char auth[] = "e02bfd9cc86e4c29805a87b707f9a409";
@@ -36,10 +37,7 @@ bool bmeReady = false;
 
 // u8g2
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, I2C_SCL, I2C_SDA, U8X8_PIN_NONE);
-byte x {0};
-byte y {0};
 bool screenOn = true;
-
 
 // ------------------------- Screen -------------------------
 
@@ -48,6 +46,9 @@ void draw(float temp, float humidity, float pressure) {
   u8g2.clearBuffer();
 
   if(screenOn) {
+    byte x {0};
+    byte y {0};
+
     const char degree {176};
     String measurement;
 
@@ -81,7 +82,7 @@ void draw(float temp, float humidity, float pressure) {
 void drawMessageLF(char const *msg) {
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_inb19_mf);
-  x = (128 - u8g2.getStrWidth(msg))/2;
+  byte x = (128 - u8g2.getStrWidth(msg))/2;
   u8g2.drawStr(x, 30, msg);
   u8g2.sendBuffer();
 }
@@ -89,7 +90,7 @@ void drawMessageLF(char const *msg) {
 void drawMessage(char const *msg) {
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_9x18_mf);
-  x = (128 - u8g2.getStrWidth(msg))/2;
+  byte x = (128 - u8g2.getStrWidth(msg))/2;
   u8g2.drawStr(x, 30, msg);
   u8g2.sendBuffer();
 }
@@ -102,9 +103,11 @@ void drawMeasurements() {
 
 // ------------------------- Blynk -------------------------
 void sendMeasurements() {
-  Blynk.virtualWrite(1, temp);
-  Blynk.virtualWrite(2, hum);
-  Blynk.virtualWrite(3, pres);
+  if(bmeReady) {
+    Blynk.virtualWrite(1, temp);
+    Blynk.virtualWrite(2, hum);
+    Blynk.virtualWrite(3, pres);
+  }
 }
 
 BLYNK_WRITE(V7) {
@@ -139,6 +142,7 @@ BLYNK_WRITE(V10) {
 void readMeasurements() {
   uint8_t pressureUnit = 1; // unit: B000 = Pa, B001 = hPa, B010 = Hg, B011 = atm, B100 = bar, B101 = torr, B110 = N/m^2, B111 = psi
   bme.read(pres, temp, hum, true, pressureUnit); // Parameters: (float& pressure, float& temp, float& humidity, bool celsius = false, uint8_t pressureUnit = 0x0)
+  bmeReady = true;
   Serial.print("Mes: Temp: ");
   Serial.print(temp, 4);
   Serial.print(", Humidity: ");
@@ -146,7 +150,7 @@ void readMeasurements() {
   Serial.print(", Pressure: ");
   Serial.print(pres, 4);
   Serial.println("");
-  sendMeasurements();
+  // sendMeasurements();
   drawMeasurements();
 }
 
@@ -185,12 +189,14 @@ void setup() {
   drawMessage("Blynk configured");
 
   bmeReady = true;
-  timer.setInterval(15000L, readMeasurements);
-  drawMessage("Timer started");
   readMeasurements();
+  readTimer.setInterval(5000L, readMeasurements);
+  sendTimer.setInterval(30000L, sendMeasurements);
+  drawMessage("Timer started");
 }
 
 void loop() {
   Blynk.run();
-  timer.run();
+  readTimer.run();
+  sendTimer.run();
 }
