@@ -9,6 +9,9 @@
 #include <Wire.h>
 #include <BME280I2C.h>
 
+// SW Serial
+#include <SoftwareSerial.h>
+
 #include <SimpleTimer.h>
 
 #include <U8g2lib.h>
@@ -18,6 +21,12 @@
 
 #define I2C_SDA 5
 #define I2C_SCL 4
+
+#define SENSOR_SERIAL swSer
+
+SoftwareSerial swSer(13, 15, false, 256); // GPIO15 (TX) and GPIO13 (RX)
+byte cmd[9] = {0xFF,0x01,0x86,0x00,0x00,0x00,0x00,0x00,0x79};
+unsigned char response[7];
 
 WiFiManager wifiManager;
 
@@ -32,8 +41,11 @@ char server[] = "2010.io";
 WidgetTerminal terminal(V10);
 
 // Measured data
+unsigned int co2 = 0;
 float temp, hum, pres;
 bool bmeReady = false;
+
+float tempG[1280];
 
 // u8g2
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, I2C_SCL, I2C_SDA, U8X8_PIN_NONE);
@@ -41,7 +53,7 @@ bool screenOn = true;
 
 // ------------------------- Screen -------------------------
 
-void draw(float temp, float humidity, float pressure) {
+void draw(unsigned int co2, float temp, float humidity, float pressure) {
   Serial.print("draw: ");
   u8g2.clearBuffer();
 
@@ -55,13 +67,21 @@ void draw(float temp, float humidity, float pressure) {
     u8g2.setFont(u8g2_font_9x18_mf);
     // u8g2.setFont(u8g2_font_inb19_mf);
     byte h = u8g2.getAscent() - u8g2.getDescent() + 2;
-    char buf[12];
+    char buf[20];
 
-    measurement = "T:" + String(temp) + "" + degree + "C";
+    y = 0;
+
+    measurement = "CO2:" + String(co2) + " ppm";
     measurement.toCharArray(buf, 12);
     Serial.println(buf);
     x = (128 - u8g2.getStrWidth(buf))/2;
-    y = h;
+    y += h;
+    u8g2.drawStr(x, y, buf);
+
+    measurement = "T:" + String(temp) + "" + degree + "C";
+    measurement.toCharArray(buf, 12);
+    x = (128 - u8g2.getStrWidth(buf))/2;
+    y += h;
     u8g2.drawStr(x, y, buf);
 
     measurement = "H:" + String(humidity) + "%";
@@ -97,7 +117,7 @@ void drawMessage(char const *msg) {
 
 void drawMeasurements() {
   if(screenOn) {
-    draw(temp, hum, pres);
+    draw(co2, temp, hum, pres);
   }
 }
 
@@ -107,13 +127,18 @@ void sendMeasurements() {
     Blynk.virtualWrite(1, temp);
     Blynk.virtualWrite(2, hum);
     Blynk.virtualWrite(3, pres);
+    Blynk.virtualWrite(9, co2);
+    if(millis() > 3 * 60 * 1000 && co2 > 1 && co2 < 4999) {
+      Blynk.virtualWrite(8, co2);
+    }
+    Blynk.virtualWrite(17, millis());
   }
 }
 
 BLYNK_WRITE(V7) {
   screenOn = param[0].asInt() == 1;
   if(screenOn) {
-    draw(temp, hum, pres);
+    draw(co2, temp, hum, pres);
   } else {
     u8g2.clear();
   }
@@ -126,7 +151,7 @@ BLYNK_WRITE(V10) {
   Serial.println(cmd);
   if(cmd == "scron") {
     screenOn = true;
-    draw(temp, hum, pres);
+    draw(co2, temp, hum, pres);
     terminal.println("Screen on");
   } else if(cmd == "scroff") {
     screenOn = false;
@@ -138,12 +163,18 @@ BLYNK_WRITE(V10) {
   terminal.flush();
 }
 
+void readCO2() {
+}
+
 // ------------------------- BME280 -------------------------
 void readMeasurements() {
+  readCO2();
   uint8_t pressureUnit = 1; // unit: B000 = Pa, B001 = hPa, B010 = Hg, B011 = atm, B100 = bar, B101 = torr, B110 = N/m^2, B111 = psi
   bme.read(pres, temp, hum, true, pressureUnit); // Parameters: (float& pressure, float& temp, float& humidity, bool celsius = false, uint8_t pressureUnit = 0x0)
   bmeReady = true;
-  Serial.print("Mes: Temp: ");
+  Serial.print("CO₂: ");
+  Serial.print(co2);
+  Serial.print(", Temp: ");
   Serial.print(temp, 4);
   Serial.print(", Humidity: ");
   Serial.print(hum, 4);
@@ -155,6 +186,7 @@ void readMeasurements() {
 }
 
 void setup() {
+  SENSOR_SERIAL.begin(9600);
   Serial.begin(9600);
   u8g2.begin();
 
