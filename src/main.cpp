@@ -33,6 +33,7 @@ WiFiManager wifiManager;
 BME280I2C bme;
 
 SimpleTimer readTimer;
+SimpleTimer readCO2Timer;
 SimpleTimer sendTimer;
 
 // Blynk data
@@ -44,6 +45,7 @@ WidgetTerminal terminal(V10);
 unsigned int co2 = 0;
 float temp, hum, pres;
 bool bmeReady = false;
+bool co2Ready = false;
 
 float tempG[1280];
 
@@ -71,8 +73,13 @@ void draw(unsigned int co2, float temp, float humidity, float pressure) {
 
     y = 0;
 
-    measurement = "CO2:" + String(co2) + " ppm";
-    measurement.toCharArray(buf, 12);
+    if(co2Ready) {
+      measurement = "CO2:" + String(co2) + " ppm";
+    } else {
+      measurement = "CO2:~" + String(co2) + " ppm";
+    }
+
+    measurement.toCharArray(buf, 20);
     Serial.println(buf);
     x = (128 - u8g2.getStrWidth(buf))/2;
     y += h;
@@ -128,7 +135,7 @@ void sendMeasurements() {
     Blynk.virtualWrite(2, hum);
     Blynk.virtualWrite(3, pres);
     Blynk.virtualWrite(9, co2);
-    if(millis() > 3 * 60 * 1000 && co2 > 1 && co2 < 4999) {
+    if(co2Ready) {
       Blynk.virtualWrite(8, co2);
     }
     Blynk.virtualWrite(17, millis());
@@ -164,14 +171,57 @@ BLYNK_WRITE(V10) {
 }
 
 void readCO2() {
+  bool header_found {false};
+  char tries {0};
+
+  SENSOR_SERIAL.write(cmd, 9);
+  memset(response, 0, 7);
+
+    // Looking for packet start
+  while(SENSOR_SERIAL.available() && (!header_found)) {
+    if(SENSOR_SERIAL.read() == 0xff ) {
+      if(SENSOR_SERIAL.read() == 0x86 ) {
+        header_found = true;
+      }
+    }
+  }
+
+  if (header_found) {
+    SENSOR_SERIAL.readBytes(response, 7);
+
+    byte crc = 0x86;
+    for (char i = 0; i < 6; i++) {
+      crc+=response[i];
+    }
+    crc = 0xff - crc;
+    crc++;
+
+    if ( !(response[6] == crc) ) {
+      Serial.println("CO2: CRC error: " + String(crc) + " / "+ String(response[6]));
+    } else {
+      unsigned int responseHigh = (unsigned int) response[0];
+      unsigned int responseLow = (unsigned int) response[1];
+      unsigned int ppm = (256*responseHigh) + responseLow;
+      co2 = ppm;
+      Serial.print("CO2: " + String(co2));
+    }
+  } else {
+    Serial.println("CO2: Header not found");
+  }
+  if(!co2Ready && millis() > 3 * 60 * 1000) { //if(millis() > 3 * 60 * 1000 && co2 > 1 && co2 < 4999) {
+    co2Ready = true;
+  }
+  Serial.print(", ready: ");
+  Serial.println(co2Ready);
 }
 
 // ------------------------- BME280 -------------------------
 void readMeasurements() {
-  readCO2();
   uint8_t pressureUnit = 1; // unit: B000 = Pa, B001 = hPa, B010 = Hg, B011 = atm, B100 = bar, B101 = torr, B110 = N/m^2, B111 = psi
   bme.read(pres, temp, hum, true, pressureUnit); // Parameters: (float& pressure, float& temp, float& humidity, bool celsius = false, uint8_t pressureUnit = 0x0)
   bmeReady = true;
+  Serial.print(millis() / 1000);
+  Serial.print(" - ");
   Serial.print("CO₂: ");
   Serial.print(co2);
   Serial.print(", Temp: ");
@@ -222,6 +272,7 @@ void setup() {
 
   bmeReady = true;
   readMeasurements();
+  readCO2Timer.setInterval(30000L, readCO2);
   readTimer.setInterval(5000L, readMeasurements);
   sendTimer.setInterval(30000L, sendMeasurements);
   drawMessage("Timer started");
@@ -230,5 +281,6 @@ void setup() {
 void loop() {
   Blynk.run();
   readTimer.run();
+  readCO2Timer.run();
   sendTimer.run();
 }
