@@ -52,6 +52,9 @@ float tempG[1280];
 // u8g2
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, I2C_SCL, I2C_SDA, U8X8_PIN_NONE);
 bool screenOn = true;
+unsigned long screenOnTime = 0;
+
+#define SCREEN_TIMEOUT_MIN 10
 
 // ------------------------- Screen -------------------------
 
@@ -102,6 +105,19 @@ void draw(unsigned int co2, float temp, float humidity, float pressure) {
     x = (128 - u8g2.getStrWidth(buf))/2;
     y += h;
     u8g2.drawStr(x, y, buf);
+
+    Serial.print("timeout: ");
+    Serial.print(millis());
+    Serial.print(", ");
+    Serial.println(screenOnTime);
+    if(screenOnTime + SCREEN_TIMEOUT_MIN * 60 * 1000 < millis()) {
+      Serial.print("screen of by timeout: ");
+      Serial.println(screenOnTime + SCREEN_TIMEOUT_MIN * 60 * 1000);
+      screenOn = false;
+      u8g2.clear();
+    }
+  } else {
+    u8g2.clear();
   }
   u8g2.sendBuffer();
 }
@@ -138,16 +154,18 @@ void sendMeasurements() {
     if(co2Ready) {
       Blynk.virtualWrite(8, co2);
     }
-    Blynk.virtualWrite(17, millis());
+    Blynk.virtualWrite(17, millis() / 1000.0 / 60.0 / 60.0);
   }
 }
 
 BLYNK_WRITE(V7) {
-  screenOn = param[0].asInt() == 1;
-  if(screenOn) {
+  bool val = param[0].asInt() == 1;
+  if(val) {
+    screenOn = true;
+    screenOnTime = millis();
     draw(co2, temp, hum, pres);
-  } else {
-    u8g2.clear();
+  // } else {
+    // u8g2.clear();
   }
 }
 
@@ -158,12 +176,18 @@ BLYNK_WRITE(V10) {
   Serial.println(cmd);
   if(cmd == "scron") {
     screenOn = true;
+    screenOnTime = millis();
     draw(co2, temp, hum, pres);
     terminal.println("Screen on");
   } else if(cmd == "scroff") {
     screenOn = false;
     u8g2.clear();
     terminal.println("Screen off");
+  } else if(cmd == "status") {
+    terminal.println("Screen:");
+    terminal.println(screenOn);
+    terminal.println(screenOnTime / 1000 / 60);
+    terminal.println(millis() / 1000 / 60);
   } else {
     terminal.println("Supported commands:\nscron\nscroff");
   }
