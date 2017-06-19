@@ -19,6 +19,9 @@
 #define BLYNK_PRINT Serial
 #include <BlynkSimpleEsp8266.h>
 
+#define RED_LED 12
+#define GREEN_LED 14
+
 #define I2C_SDA 5
 #define I2C_SCL 4
 
@@ -35,6 +38,7 @@ BME280I2C bme;
 SimpleTimer readTimer;
 SimpleTimer readCO2Timer;
 SimpleTimer sendTimer;
+SimpleTimer ledTimer;
 
 // Blynk data
 char auth[] = "e02bfd9cc86e4c29805a87b707f9a409";
@@ -259,6 +263,32 @@ void readMeasurements() {
   drawMeasurements();
 }
 
+void ledFlashing() {
+  if(co2Ready) {
+    if(co2 < 600) {
+      digitalWrite(RED_LED, LOW);
+      digitalWrite(GREEN_LED, LOW);
+    } else if(co2 < 1000) {
+      digitalWrite(RED_LED, LOW);
+      digitalWrite(GREEN_LED, HIGH);
+    } else if(co2 < 2500) {
+      digitalWrite(RED_LED, HIGH);
+      digitalWrite(GREEN_LED, LOW);
+    } else {
+      if((millis() / 500) % 2 == 0) {
+        digitalWrite(RED_LED, LOW);
+        digitalWrite(GREEN_LED, LOW);
+      } else {
+        digitalWrite(RED_LED, HIGH);
+        digitalWrite(GREEN_LED, LOW);
+      }
+    }
+  } else {
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(GREEN_LED, LOW);
+  }
+}
+
 void setup() {
   SENSOR_SERIAL.begin(9600);
   Serial.begin(9600);
@@ -267,6 +297,9 @@ void setup() {
   drawMessageLF("Start");
 
   pinMode(BUILTIN_LED, OUTPUT);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(GREEN_LED, OUTPUT);
+
   digitalWrite(BUILTIN_LED, LOW);
   delay(500);
   digitalWrite(BUILTIN_LED, HIGH);
@@ -299,6 +332,7 @@ void setup() {
   readCO2Timer.setInterval(30000L, readCO2);
   readTimer.setInterval(5000L, readMeasurements);
   sendTimer.setInterval(30000L, sendMeasurements);
+  ledTimer.setInterval(100L, ledFlashing);
   drawMessage("Timer started");
 }
 
@@ -307,4 +341,5 @@ void loop() {
   readTimer.run();
   readCO2Timer.run();
   sendTimer.run();
+  ledTimer.run();
 }
