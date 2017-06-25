@@ -59,7 +59,7 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, I2C_SCL, I2C_SDA, U8X8_PIN_NON
 bool screenOn = true;
 unsigned long screenOnTime = 0;
 
-#define SCREEN_TIMEOUT_MIN 10
+#define SCREEN_TIMEOUT_MIN 1
 
 // ------------------------- Screen -------------------------
 
@@ -305,6 +305,14 @@ void ledFlashing() {
   }
 }
 
+void buttonISR() {
+
+  Serial.println("---- buttonISR: ");
+  screenOn = true;
+  screenOnTime = millis();
+  draw(co2, temp, hum, pres);
+}
+
 void setup() {
   SENSOR_SERIAL.begin(9600);
   Serial.begin(9600);
@@ -357,7 +365,8 @@ void setup() {
   sendTimer.setInterval(30000L, sendMeasurements);
   ledTimer.setInterval(100L, ledFlashing);
 
-  // attachInterrupt(digitalPinToInterrupt(RED_BUTTON), buttonISR, CHANGE);
+  pinMode(RED_BUTTON, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(RED_BUTTON), buttonISR, CHANGE);
 }
 
 void loop() {
