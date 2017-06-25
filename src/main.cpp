@@ -19,8 +19,9 @@
 #define BLYNK_PRINT Serial
 #include <BlynkSimpleEsp8266.h>
 
-#define RED_LED 12
+#define RED_LED 16
 #define GREEN_LED 14
+#define RED_BUTTON 12
 
 #define I2C_SDA 5
 #define I2C_SCL 4
@@ -187,13 +188,28 @@ BLYNK_WRITE(V10) {
     screenOn = false;
     u8g2.clear();
     terminal.println("Screen off");
-  } else if(cmd == "status") {
+  } else if(cmd == "st") {
     terminal.println("Screen:");
     terminal.println(screenOn);
     terminal.println(screenOnTime / 1000 / 60);
     terminal.println(millis() / 1000 / 60);
+  } else if(cmd == "c4") {
+    terminal.println("set CO2: 401");
+    co2 = 401;
+  } else if(cmd == "c7") {
+    terminal.println("set CO2: 701");
+    co2 = 701;
+  } else if(cmd == "c10") {
+    terminal.println("set CO2: 1001");
+    co2 = 1001;
+  } else if(cmd == "c25") {
+    terminal.println("set CO2: 2501");
+    co2 = 2501;
+  } else if(cmd == "c40") {
+    terminal.println("set CO2: 4001");
+    co2 = 4001;
   } else {
-    terminal.println("Supported commands:\nscron\nscroff");
+    terminal.println("Supported commands:\nscron\nscroff\nst\nc4, c7, c10, c25, c40\n");
   }
   terminal.flush();
 }
@@ -301,11 +317,18 @@ void setup() {
   pinMode(GREEN_LED, OUTPUT);
 
   digitalWrite(BUILTIN_LED, LOW);
+  digitalWrite(RED_LED, HIGH);
+  digitalWrite(GREEN_LED, LOW);
   delay(500);
   digitalWrite(BUILTIN_LED, HIGH);
   delay(500);
   digitalWrite(BUILTIN_LED, LOW);
+  digitalWrite(RED_LED, LOW);
+  digitalWrite(GREEN_LED, HIGH);
   delay(500);
+  digitalWrite(RED_LED, LOW);
+  digitalWrite(GREEN_LED, LOW);
+
 
   wifiManager.autoConnect("AutoConnectAP", "esp8266");
   Serial.println("connected...yeey :)");
@@ -333,7 +356,8 @@ void setup() {
   readTimer.setInterval(5000L, readMeasurements);
   sendTimer.setInterval(30000L, sendMeasurements);
   ledTimer.setInterval(100L, ledFlashing);
-  drawMessage("Timer started");
+
+  // attachInterrupt(digitalPinToInterrupt(RED_BUTTON), buttonISR, CHANGE);
 }
 
 void loop() {
